@@ -1,6 +1,5 @@
 typedef struct {
     char **data;
-
     unsigned cap;  // capacity of array
     unsigned len;  // number of items in the list (array)
 } arraylist_t;
