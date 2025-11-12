@@ -7,7 +7,7 @@
 #include <ctype.h>
 
 #ifndef BUFSIZE
-#define BUFSIZE 256;
+#define BUFSIZE 256
 #endif
 
 void cd(char *pathname);
@@ -16,9 +16,9 @@ char *which(char *program);
 void exitShell();
 char *killShell(arraylist_t args);
 arraylist_t readLine(int fd);
+
 int main(int argc, char **argv)
 {
-
     int fd = 0;
     if (argc == 1)
     {
@@ -43,6 +43,11 @@ int main(int argc, char **argv)
             printf("mysh> ");
             fflush(stdout);
             args = readLine(fd);
+            if (args.len == 0)
+            {
+                exit(1);
+            }
+
             char *cmd = args.data[0];
             if (strcmp(cmd, "#") == 0)
             {
@@ -51,16 +56,19 @@ int main(int argc, char **argv)
             }
             else if (strcmp(cmd, "die") == 0)
             {
-                char* res = killShell(args);
-                puts(res);
-                exit(0);
+                char *res = killShell(args);
+                if (res != NULL)
+                {
+                    puts(res);
+                    free(res);
+                }
+                exit(EXIT_FAILURE);
             }
             else if (strcmp(cmd, "cd") == 0)
             {
-                if (args.len > 2)
+                if (args.len != 2)
                 {
-                    fprintf(stderr, "Invalid arguments");
-                    exit(1);
+                    fprintf(stderr, "Invalid arguments\n");
                 }
                 else
                 {
@@ -71,8 +79,7 @@ int main(int argc, char **argv)
             {
                 if (args.len > 2)
                 {
-                    fprintf(stderr, "Invalid arguments");
-                    exit(1);
+                    fprintf(stderr, "Invalid arguments\n");
                 }
                 else
                 {
@@ -87,6 +94,7 @@ int main(int argc, char **argv)
                 puts(res);
                 free(res);
             }
+
             for (int i = 0; i < args.len; i++)
             {
                 char *word = args.data[i];
@@ -105,30 +113,40 @@ int main(int argc, char **argv)
                     break;
                 }
             }
+
+            for (int i = 0; i < args.len; i++)
+            {
+                free(args.data[i]);
+            }
+            al_destroy(&args);
         }
-        al_destroy(&args);
     }
     else
     {
+        // Non-interactive mode not implemented yet
     }
+
     return 0;
 }
 
 arraylist_t readLine(int fd)
 {
-    char buf[256];
+    char buf[BUFSIZE];
     char *word = NULL;
     int bytes = 0;
     int wordlen = 0;
+    int newLine = 0;
     arraylist_t line;
     al_init(&line, 10);
-    while ((bytes = read(fd, buf, 256)) > 0)
+
+    while ((bytes = read(fd, buf, BUFSIZE)) > 0)
     {
         int segstart = 0;
         int pos;
+
         for (pos = 0; pos < bytes; pos++)
         {
-            if (isspace(buf[pos]) || buf[pos] == '\n')
+            if (buf[pos] == '\n')
             {
                 int seglen = pos - segstart;
                 word = realloc(word, wordlen + seglen + 1);
@@ -138,14 +156,30 @@ arraylist_t readLine(int fd)
                 }
                 memcpy(word + wordlen, buf + segstart, seglen);
                 word[wordlen + seglen] = '\0';
+                al_push(&line, word);
+                wordlen = 0;
+                word = NULL;
+                newLine = 1;
+                break;
+            }
 
-                // puts(word);
+            if (isspace(buf[pos]) && buf[pos] != '\n')
+            {
+                int seglen = pos - segstart;
+                word = realloc(word, wordlen + seglen + 1);
+                if (word == NULL)
+                {
+                    exit(1);
+                }
+                memcpy(word + wordlen, buf + segstart, seglen);
+                word[wordlen + seglen] = '\0';
                 al_push(&line, word);
                 wordlen = 0;
                 word = NULL;
                 segstart = pos + 1;
             }
         }
+
         if (segstart < pos)
         {
             int seglen = pos - segstart;
@@ -154,9 +188,10 @@ arraylist_t readLine(int fd)
             word[wordlen + seglen] = '\0';
             wordlen = wordlen + seglen;
         }
-        free(word);
-        return line;
+        if(newLine == 1) break;
+
     }
+    return line;
 }
 
 void cd(char *pathname)
@@ -175,6 +210,7 @@ char *pwd()
     getcwd(currentdir, 64);
     return currentdir;
 }
+
 char *which(char *program)
 {
     char *path1 = "/usr/local/bin";
@@ -193,6 +229,9 @@ char *which(char *program)
         return res;
     }
 
+    free(res);
+    len = strlen(path2);
+    res = malloc(plen + len + 1);
     res = strcpy(res, path2);
     res = strcat(res, "/");
     res = strcat(res, program);
@@ -202,9 +241,13 @@ char *which(char *program)
         return res;
     }
 
-    res = strcpy(res, path2);
+    free(res);
+    len = strlen(path3);
+    res = malloc(plen + len + 1);
+    res = strcpy(res, path3);
     res = strcat(res, "/");
     res = strcat(res, program);
+
     if (access(res, F_OK) == 0)
     {
         return res;
@@ -213,11 +256,13 @@ char *which(char *program)
     fprintf(stderr, "Program not found\n");
     exit(1);
 }
+
 void exitShell()
 {
     puts("mysh: exiting");
     exit(0);
 }
+
 char *killShell(arraylist_t args)
 {
     int len = strlen(args.data[0]);
@@ -229,6 +274,7 @@ char *killShell(arraylist_t args)
             res = realloc(res, len + strlen(args.data[i]));
             res = strcat(res, args.data[i]);
         }
+        return res;
     }
-    return res;
+    return NULL;
 }
