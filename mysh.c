@@ -5,6 +5,7 @@
 #include <string.h>
 #include "arraylist.h"
 #include <ctype.h>
+#include <sys/wait.h>
 
 #ifndef BUFSIZE
 #define BUFSIZE 256
@@ -16,6 +17,7 @@ char *which(char *program);
 void exitShell();
 char *killShell(arraylist_t args);
 arraylist_t readLine(int fd);
+int generalCommands(arraylist_t args, int fd);
 
 int main(int argc, char **argv)
 {
@@ -32,100 +34,22 @@ int main(int argc, char **argv)
             exit(1);
         }
     }
-
+    arraylist_t args;
     if (isatty(fd))
     {
-        arraylist_t args;
         puts("Welcome to my shell!");
         int ok = 1;
-        while (ok)
+        while (ok == 1)
         {
             printf("mysh> ");
             fflush(stdout);
-            args = readLine(fd);
-            if (args.len == 0)
-            {
-                exit(1);
-            }
-
-            char *cmd = args.data[0];
-            if (strcmp(cmd, "#") == 0)
-            {
-                puts("comment");
-                continue;
-            }
-            else if (strcmp(cmd, "die") == 0)
-            {
-                char *res = killShell(args);
-                if (res != NULL)
-                {
-                    puts(res);
-                    free(res);
-                }
-                exit(EXIT_FAILURE);
-            }
-            else if (strcmp(cmd, "cd") == 0)
-            {
-                if (args.len != 2)
-                {
-                    fprintf(stderr, "Invalid arguments\n");
-                }
-                else
-                {
-                    cd(args.data[1]);
-                }
-            }
-            else if (strcmp(cmd, "pwd") == 0)
-            {
-                if (args.len > 2)
-                {
-                    fprintf(stderr, "Invalid arguments\n");
-                }
-                else
-                {
-                    char *res = pwd();
-                    puts(res);
-                    free(res);
-                }
-            }
-            else if (strcmp(cmd, "which") == 0)
-            {
-                char *res = which(args.data[1]);
-                puts(res);
-                free(res);
-            }
-
-            for (int i = 0; i < args.len; i++)
-            {
-                char *word = args.data[i];
-                if (strcmp(word, "exit") == 0)
-                {
-                    exitShell();
-                }
-                else if (strcmp(word, "<") == 0 || strcmp(word, ">") == 0)
-                {
-                    puts("redirect");
-                    break;
-                }
-                else if (strcmp(word, "|") == 0)
-                {
-                    puts("pipe");
-                    break;
-                }
-            }
-
-            for (int i = 0; i < args.len; i++)
-            {
-                free(args.data[i]);
-            }
-            al_destroy(&args);
+            generalCommands(args, fd);
         }
     }
     else
     {
-        // Non-interactive mode not implemented yet
+        generalCommands(args, fd);
     }
-
     return 0;
 }
 
@@ -179,7 +103,6 @@ arraylist_t readLine(int fd)
                 segstart = pos + 1;
             }
         }
-
         if (segstart < pos)
         {
             int seglen = pos - segstart;
@@ -188,8 +111,17 @@ arraylist_t readLine(int fd)
             word[wordlen + seglen] = '\0';
             wordlen = wordlen + seglen;
         }
-        if(newLine == 1) break;
+        if (newLine == 1){
+            word = NULL;
+            break;
+        }
+            
+    }
 
+    if (wordlen > 0 && word != NULL)
+    {
+        word[wordlen] = '\0';
+        al_push(&line, word);
     }
     return line;
 }
@@ -254,13 +186,12 @@ char *which(char *program)
     }
 
     fprintf(stderr, "Program not found\n");
-    exit(1);
 }
 
 void exitShell()
 {
     puts("mysh: exiting");
-    exit(0);
+    exit(EXIT_SUCCESS);
 }
 
 char *killShell(arraylist_t args)
@@ -277,4 +208,106 @@ char *killShell(arraylist_t args)
         return res;
     }
     return NULL;
+}
+
+int generalCommands(arraylist_t args, int fd)
+{
+    args = readLine(fd);
+    if (args.len == 0)
+    {
+        exit(1);
+    }
+
+    char *cmd = args.data[0];
+    if (strcmp(cmd, "#") == 0)
+    {
+        puts("comment");
+        return 1;
+    }
+    else if (strcmp(cmd, "die") == 0)
+    {
+        char *res = killShell(args);
+        if (res != NULL)
+        {
+            puts(res);
+            free(res);
+        }
+        exit(EXIT_FAILURE);
+    }
+    else if (strcmp(cmd, "cd") == 0)
+    {
+        if (args.len != 2)
+        {
+            fprintf(stderr, "Invalid arguments\n");
+        }
+        else
+        {
+            cd(args.data[1]);
+        }
+    }
+    else if (strcmp(cmd, "pwd") == 0)
+    {
+        if (args.len > 2)
+        {
+            fprintf(stderr, "Invalid arguments\n");
+        }
+        else
+        {
+            char *res = pwd();
+            puts(res);
+            free(res);
+        }
+    }
+    else if (strcmp(cmd, "which") == 0)
+    {
+        char *res = which(args.data[1]);
+        puts(res);
+        free(res);
+    }
+    else if (strcmp(cmd, "exit") == 0)
+    {
+        exitShell();
+    }
+    else
+    {
+        int redirect = 0;
+        char* fileName;
+        int fd2;
+        for(int i = 0; i < args.len; i++){
+            char* s = args.data[i];
+            puts(s);
+            if(strcmp(s, ">") == 0){
+                fileName = args.data[i + 1];
+                redirect = 1;
+                break;
+            }
+        }
+        char *cmdName = args.data[0];
+        char *pathName = which(cmdName);
+        pid_t child = fork();
+        if (child == 0)
+        {
+            if(redirect == 1){
+                fd2 = open(fileName, O_WRONLY | O_TRUNC | O_CREAT, 0640);
+                if(dup2(fd2, STDOUT_FILENO) == -1){
+                    exit(1);
+                }
+                close(fd2);
+            }
+            execv(pathName, args.data);
+            perror(pathName);
+            exit(EXIT_FAILURE);
+        }
+        int status;
+        pid_t newChild = wait(&status);
+        // int fd3 = open(fileName, O_RDONLY);
+    }
+    if (args.len != 0)
+    {
+        for (int i = 0; i < args.len; i++)
+        {
+            free(args.data[i]);
+        }
+    }
+    al_destroy(&args);
 }
