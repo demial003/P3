@@ -111,11 +111,11 @@ arraylist_t readLine(int fd)
             word[wordlen + seglen] = '\0';
             wordlen = wordlen + seglen;
         }
-        if (newLine == 1){
+        if (newLine == 1)
+        {
             word = NULL;
             break;
         }
-            
     }
 
     if (wordlen > 0 && word != NULL)
@@ -123,6 +123,7 @@ arraylist_t readLine(int fd)
         word[wordlen] = '\0';
         al_push(&line, word);
     }
+    al_push(&line, NULL);
     return line;
 }
 
@@ -198,9 +199,9 @@ char *killShell(arraylist_t args)
 {
     int len = strlen(args.data[0]);
     char *res = malloc(len + 1);
-    if (args.len > 1)
+    if (args.len - 1 > 1)
     {
-        for (int i = 1; i < args.len; i++)
+        for (int i = 1; i < args.len - 1; i++)
         {
             res = realloc(res, len + strlen(args.data[i]));
             res = strcat(res, args.data[i]);
@@ -213,7 +214,7 @@ char *killShell(arraylist_t args)
 int generalCommands(arraylist_t args, int fd)
 {
     args = readLine(fd);
-    if (args.len == 0)
+    if (args.len - 1 == 0)
     {
         exit(1);
     }
@@ -236,7 +237,7 @@ int generalCommands(arraylist_t args, int fd)
     }
     else if (strcmp(cmd, "cd") == 0)
     {
-        if (args.len != 2)
+        if (args.len -1 != 2)
         {
             fprintf(stderr, "Invalid arguments\n");
         }
@@ -271,12 +272,13 @@ int generalCommands(arraylist_t args, int fd)
     else
     {
         int redirect = 0;
-        char* fileName;
+        char *fileName;
         int fd2;
-        for(int i = 0; i < args.len; i++){
-            char* s = args.data[i];
-            puts(s);
-            if(strcmp(s, ">") == 0){
+        for (int i = 0; i < args.len - 1; i++)
+        {
+            char *s = args.data[i];
+            if (strcmp(s, ">") == 0)
+            {
                 fileName = args.data[i + 1];
                 redirect = 1;
                 break;
@@ -287,24 +289,30 @@ int generalCommands(arraylist_t args, int fd)
         pid_t child = fork();
         if (child == 0)
         {
-            if(redirect == 1){
+            if (redirect == 1)
+            {
                 fd2 = open(fileName, O_WRONLY | O_TRUNC | O_CREAT, 0640);
-                if(dup2(fd2, STDOUT_FILENO) == -1){
+                if (dup2(fd2, STDOUT_FILENO) == -1)
+                {
                     exit(1);
                 }
                 close(fd2);
             }
             execv(pathName, args.data);
+            for (int i = 0; i < args.len - 1; i++)
+            {
+                puts(args.data[i]);
+            }
             perror(pathName);
             exit(EXIT_FAILURE);
         }
         int status;
-        pid_t newChild = wait(&status);
+        child = wait(&status);
         // int fd3 = open(fileName, O_RDONLY);
     }
-    if (args.len != 0)
+    if (args.len - 1 != 0)
     {
-        for (int i = 0; i < args.len; i++)
+        for (int i = 0; i < args.len - 1; i++)
         {
             free(args.data[i]);
         }
