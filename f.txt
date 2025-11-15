@@ -1,1 +1,1 @@
-s > f.txt
+hello > f.txt
