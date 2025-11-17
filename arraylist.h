@@ -12,3 +12,5 @@ unsigned al_length(arraylist_t *);
 int al_push(arraylist_t *, char *);
 
 int al_pop(arraylist_t *, char**);
+int al_remove(arraylist_t *L, unsigned idx);
+

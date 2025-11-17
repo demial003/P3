@@ -18,6 +18,7 @@ void exitShell();
 char *killShell(arraylist_t args);
 arraylist_t readLine(int fd);
 int generalCommands(arraylist_t args, int fd);
+static void cleanup(arraylist_t *args, arraylist_t *a2, arraylist_t *a3);
 
 int main(int argc, char **argv)
 {
@@ -150,47 +151,29 @@ char *pwd()
 
 char *which(char *program)
 {
-    char *path1 = "/usr/local/bin";
-    char *path2 = "/usr/bin";
-    char *path3 = "/bin";
-    int plen = strlen(program);
-    int len = (int)strlen(path1);
+    char *paths[] = {"/usr/local/bin", "/usr/bin", "/bin", NULL};
 
-    char *res = malloc(plen + len + 2);
-    strcpy(res, path1);
-    strcat(res, "/");
-    strcat(res, program);
-
-    if (access(res, F_OK) == 0)
+    for (int i = 0; paths[i] != NULL; i++)
     {
-        return res;
+        int plen = strlen(program);
+        int dlen = strlen(paths[i]);
+        int total = dlen + 1 + plen + 1; 
+
+        char *res = malloc(total);
+        if (!res)
+            return NULL;
+
+        strcpy(res, paths[i]);
+        strcat(res, "/");
+        strcat(res, program);
+
+        if (access(res, F_OK) == 0)
+            return res;
+
+        free(res);
     }
 
-    free(res);
-    len = strlen(path2);
-    res = malloc(plen + len + 2);
-    strcpy(res, path2);
-    strcat(res, "/");
-    strcat(res, program);
-
-    if (access(res, F_OK) == 0)
-    {
-        return res;
-    }
-
-    free(res);
-    len = strlen(path3);
-    res = malloc(plen + len + 2);
-    strcpy(res, path3);
-    strcat(res, "/");
-    strcat(res, program);
-
-    if (access(res, F_OK) == 0)
-    {
-        return res;
-    }
-
-    return NULL;
+    return NULL; 
 }
 
 void exitShell()
@@ -201,11 +184,12 @@ void exitShell()
 
 char *killShell(arraylist_t args)
 {
+    if (args.len <= 2)
+        return NULL;
+
     int total = 1;
     for (int i = 1; i < args.len - 1; i++)
-    {
         total += strlen(args.data[i]) + 1;
-    }
 
     char *res = malloc(total);
     res[0] = '\0';
@@ -214,9 +198,7 @@ char *killShell(arraylist_t args)
     {
         strcat(res, args.data[i]);
         if (i < args.len - 2)
-        {
             strcat(res, " ");
-        }
     }
 
     return res;
@@ -248,7 +230,7 @@ int generalCommands(arraylist_t args, int fd)
     }
     else if (strcmp(cmd, "cd") == 0)
     {
-        if (args.len - 1 != 2)
+        if (args.len < 2)
         {
             fprintf(stderr, "Invalid arguments\n");
         }
@@ -273,8 +255,15 @@ int generalCommands(arraylist_t args, int fd)
     else if (strcmp(cmd, "which") == 0)
     {
         char *res = which(args.data[1]);
-        puts(res);
-        free(res);
+        if (res)
+        {
+            puts(res);
+            free(res);
+        }
+        else
+        {
+            fprintf(stderr, "Program not found\n");
+        }
     }
     else if (strcmp(cmd, "exit") == 0)
     {
@@ -284,65 +273,87 @@ int generalCommands(arraylist_t args, int fd)
     {
         int redirectOut = 0;
         int redirectIn = 0;
-        int pipeCheck = 0;
         int conditional = 0;
         arraylist_t args2;
         al_init(&args2, 10);
         char *fileName;
         int fd2;
+        arraylist_t newArgs;
+        al_init(&newArgs, 10);
         for (int i = 0; i < args.len - 1; i++)
         {
             char *s = args.data[i];
             if (strcmp(s, ">") == 0)
             {
+                if (i + 1 >= args.len - 1)
+                {
+                    fprintf(stderr, "mysh: syntax error near unexpected token `newline'\n");
+                    cleanup(&args, &args2, &newArgs);
+                    return 0;
+                }
+
                 fileName = args.data[i + 1];
                 redirectOut = 1;
-                for (int j = i - 2; j < args.len; j++)
-                {
-                    char **s = malloc(sizeof(char **));
-                    al_pop(&args, s);
-                    free(s);
-                }
-                al_push(&args, NULL);
-                // break;
+
+                al_remove(&args, i);
+                al_remove(&args, i);
+                // al_push(&args, NULL);
+
+                break;
             }
+
             if (strcmp(s, "<") == 0)
             {
+                if (i + 1 >= args.len - 1)
+                {
+                    fprintf(stderr, "mysh: syntax error near unexpected token `newline'\n");
+                    cleanup(&args, &args2, &newArgs);
+                    return 0;
+                }
+
                 fileName = args.data[i + 1];
                 redirectIn = 1;
-                for (int j = i - 2; j < args.len; j++)
-                {
-                    char **s = malloc(sizeof(char **));
-                    al_pop(&args, s);
-                    puts("popped");
-                    free(s);
-                }
-                al_push(&args, NULL);
-                // break;
+
+                al_remove(&args, i);
+                al_remove(&args, i);
+                // al_push(&args, NULL);
+
+                break;
             }
+
             if (strcmp(s, "|") == 0)
             {
-                pipeCheck = 1;
-                char **temp = malloc(sizeof(char **));
-                al_pop(&args, temp);
-                free(temp);
-                for (int j = i + 1; j < args.len; j++)
+
+                for (int j = i + 1; j < args.len - 1; j++)
                 {
-                    char *s = args.data[j];
-                    al_push(&args2, s);
-                }
-                for (int i = args.len - 1; i > args2.len - 1; i--)
-                {
-                    temp = malloc(sizeof(char **));
-                    al_pop(&args, temp);
-                    free(temp);
+                    al_push(&args2, args.data[j]);
                 }
                 al_push(&args2, NULL);
-                al_push(&args, NULL);
+
+                while (args.len - 1 > i)
+                {
+                    char *tmp;
+                    al_pop(&args, &tmp);
+                }
+                args.data[i] = NULL;
                 char *cmd1 = args.data[0];
                 char *cmd2 = args2.data[0];
                 char *path1 = which(cmd1);
                 char *path2 = which(cmd2);
+                if (!path1 || !path2)
+                {
+                    if (!path1)
+                    {
+                        fprintf(stderr, "%s: Program not found\n", cmd1);
+                    }
+                    if (!path2)
+                    {
+                        fprintf(stderr, "%s: Program not found\n", cmd2);
+                    }
+                    cleanup(&args, &args2, &newArgs);
+                    return 0;
+                }
+
                 int pfd[2];
                 pipe(pfd);
 
@@ -351,10 +362,9 @@ int generalCommands(arraylist_t args, int fd)
                     dup2(pfd[1], STDOUT_FILENO);
                     close(pfd[1]);
                     close(pfd[0]);
-
                     execv(path1, args.data);
                     perror(path1);
-                    exit(EXIT_FAILURE);
+                    exit(1);
                 }
 
                 if (fork() == 0)
@@ -362,141 +372,172 @@ int generalCommands(arraylist_t args, int fd)
                     dup2(pfd[0], STDIN_FILENO);
                     close(pfd[0]);
                     close(pfd[1]);
-
                     execv(path2, args2.data);
                     perror(path2);
-                    exit(EXIT_FAILURE);
+                    exit(1);
                 }
 
-                close(pfd[1]);
                 close(pfd[0]);
+                close(pfd[1]);
 
                 wait(NULL);
                 wait(NULL);
+                free(path1);
+                free(path2);
+
+                cleanup(&args, &args2, &newArgs);
                 return 0;
             }
+
             if (strcmp(s, "or") == 0)
             {
-                arraylist_t newArgs;
-                al_init(&newArgs, 10);
                 for (int j = i + 1; j < args.len - 1; j++)
                 {
-                    char *s = args.data[j];
-                    al_push(&newArgs, s);
+                    al_push(&newArgs, args.data[j]);
                 }
-                char **temp = malloc(sizeof(char **));
-                al_pop(&args, temp);
-                free(temp);
-                for (int i = args.len - 1; i > newArgs.len - 1; i--)
-                {
-                    temp = malloc(sizeof(char **));
-                    al_pop(&args, temp);
-                    free(temp);
-                }
-
                 al_push(&newArgs, NULL);
-                al_push(&args, NULL);
+
+                while (args.len - 1 > i)
+                {
+                    char *tmp;
+                    al_pop(&args, &tmp);
+                }
+                args.data[i] = NULL;
+
                 char *cmd1 = args.data[0];
                 char *cmd2 = newArgs.data[0];
-
                 char *path1 = which(cmd1);
                 char *path2 = which(cmd2);
-                pid_t child = fork();
-                if (child == 0)
+                if (!path1 || !path2)
+                {
+                    if (!path1)
+                    {
+                        fprintf(stderr, "%s: Program not found\n", cmd1);
+                    }
+                    if (!path2)
+                    {
+                        fprintf(stderr, "%s: Program not found\n", cmd2);
+                    }
+                    cleanup(&args, &args2, &newArgs);
+                    return 0;
+                }
+
+                pid_t c = fork();
+                if (c == 0)
                 {
                     execv(path1, args.data);
                     perror(path1);
-                    exit(EXIT_FAILURE);
+                    exit(1);
                 }
 
                 int status;
-                child = wait(&status);
-                if (WIFSIGNALED(status))
+                wait(&status);
+
+                if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
                 {
-                    pid_t child = fork();
-                    if (child == 0)
+                    pid_t c2 = fork();
+                    if (c2 == 0)
                     {
                         execv(path2, newArgs.data);
                         perror(path2);
-                        exit(EXIT_FAILURE);
+                        exit(1);
                     }
+                    wait(NULL);
                 }
-                wait(NULL);
+                cleanup(&args, &args2, &newArgs);
                 return 0;
             }
+
             else if (strcmp(s, "and") == 0)
             {
-                arraylist_t newArgs;
-                al_init(&newArgs, 10);
                 for (int j = i + 1; j < args.len - 1; j++)
-                {
-                    char *s = args.data[j];
-                    al_push(&newArgs, s);
-                }
-
-                char **temp = malloc(sizeof(char **));
-                al_pop(&args, temp);
-                free(temp);
-                for (int i = args.len - 1; i > newArgs.len - 1; i--)
-                {
-                    temp = malloc(sizeof(char **));
-                    al_pop(&args, temp);
-                    free(temp);
-                }
+                    al_push(&newArgs, args.data[j]);
                 al_push(&newArgs, NULL);
-                al_push(&args, NULL);
+
+                while (args.len - 1 > i)
+                {
+                    char *tmp;
+                    al_pop(&args, &tmp);
+                }
+                args.data[i] = NULL;
 
                 char *cmd1 = args.data[0];
                 char *cmd2 = newArgs.data[0];
-
                 char *path1 = which(cmd1);
                 char *path2 = which(cmd2);
-                pid_t child = fork();
-                if (child == 0)
+                if (!path1 || !path2)
+                {
+                    if (!path1)
+                    {
+                        fprintf(stderr, "%s: Program not found\n", cmd1);
+                    }
+                    if (!path2)
+                    {
+                        fprintf(stderr, "%s: Program not found\n", cmd2);
+                    }
+                    cleanup(&args, &args2, &newArgs);
+                    return 0;
+                }
+
+                pid_t c = fork();
+                if (c == 0)
                 {
                     execv(path1, args.data);
                     perror(path1);
-                    exit(EXIT_FAILURE);
+                    exit(1);
                 }
 
                 int status;
-                child = wait(&status);
-                if (WIFEXITED(status))
+                wait(&status);
+
+                if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
                 {
-                    pid_t child = fork();
-                    if (child == 0)
+                    pid_t c2 = fork();
+                    if (c2 == 0)
                     {
                         execv(path2, newArgs.data);
                         perror(path2);
-                        exit(EXIT_FAILURE);
+                        exit(1);
                     }
+                    wait(NULL);
                 }
-                wait(NULL);
+                free(path1);
+                free(path2);
+                cleanup(&args, &args2, &newArgs);
                 return 0;
             }
         }
 
         char *cmdName = args.data[0];
         char *pathName = which(cmdName);
+        if (!pathName)
+        {
+            fprintf(stderr, "%s: Program not found\n", cmdName);
+            cleanup(&args, &args2, &newArgs);
+            return 0;
+        }
         pid_t child = fork();
         if (child == 0)
         {
             if (redirectOut == 1)
             {
-                fd2 = open(fileName, O_WRONLY | O_TRUNC | O_CREAT, 0640);
+                fd2 = open(fileName, O_WRONLY | O_TRUNC | O_CREAT, 0644);
                 if (dup2(fd2, STDOUT_FILENO) == -1)
                 {
+                    perror(fileName);
                     exit(1);
                 }
                 close(fd2);
             }
             else if (redirectIn == 1)
             {
-                fd2 = open(fileName, O_WRONLY | O_TRUNC | O_CREAT, 0640);
-                if (dup2(fd2, STDIN_FILENO) == -1)
+                fd2 = open(fileName, O_RDONLY);
+                if (fd2 < 0)
                 {
+                    perror(fileName);
                     exit(1);
                 }
+                dup2(fd2, STDIN_FILENO);
                 close(fd2);
             }
             execv(pathName, args.data);
@@ -506,14 +547,40 @@ int generalCommands(arraylist_t args, int fd)
         int status;
         child = wait(&status);
 
-        al_destroy(&args2);
+        free(pathName);
+        cleanup(&args, &args2, &newArgs);
+        return 0;
     }
-    if (args.len - 1 != 0)
+}
+
+static void cleanup(arraylist_t *args, arraylist_t *a2, arraylist_t *a3)
+{
+    if (a2 && a2->data)
     {
-        for (int i = 0; i < args.len - 1; i++)
-        {
-            free(args.data[i]);
-        }
+        free(a2->data);
+        a2->data = NULL;
+        a2->len = 0;
+        a2->cap = 0;
     }
-    al_destroy(&args);
+
+    if (a3 && a3->data)
+    {
+        free(a3->data);
+        a3->data = NULL;
+        a3->len = 0;
+        a3->cap = 0;
+    }
+
+    if (args && args->data)
+    {
+        for (int i = 0; i < (int)args->len - 1; ++i)
+        {
+            free(args->data[i]);
+        }
+
+        al_destroy(args);
+        args->data = NULL;
+        args->len = 0;
+        args->cap = 0;
+    }
 }

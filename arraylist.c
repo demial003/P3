@@ -75,3 +75,14 @@ al_pop (arraylist_t *L, char **dest)
 
     return 1;
 }
+int al_remove(arraylist_t *L, unsigned idx)
+{
+    if (idx >= L->len) return 0;
+
+    for (unsigned i = idx; i < L->len - 1; i++)
+        L->data[i] = L->data[i + 1];
+
+    L->len--;
+    return 1;
+}
+
