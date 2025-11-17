@@ -350,8 +350,8 @@ int generalCommands(arraylist_t args, int fd)
                     {
                         fprintf(stderr, "%s: Program not found\n", cmd2);
                     }
-                    cleanup(&args, &args2, &newArgs);
-                    return 0;
+                    // cleanup(&args, &args2, &newArgs);
+                    // return 0;
                 }
 
                 int pfd[2];
@@ -418,15 +418,15 @@ int generalCommands(arraylist_t args, int fd)
                     {
                         fprintf(stderr, "%s: Program not found\n", cmd2);
                     }
-                    cleanup(&args, &args2, &newArgs);
-                    return 0;
+                    // cleanup(&args, &args2, &newArgs);
+                    // return 0;
                 }
 
                 pid_t c = fork();
                 if (c == 0)
                 {
                     execv(path1, args.data);
-                    perror(path1);
+                    // perror(path1);
                     exit(1);
                 }
 
@@ -467,16 +467,16 @@ int generalCommands(arraylist_t args, int fd)
                 char *path2 = which(cmd2);
                 if (!path1 || !path2)
                 {
-                    if (!path1)
-                    {
-                        fprintf(stderr, "%s: Program not found\n", cmd1);
-                    }
-                    if (!path2)
-                    {
-                        fprintf(stderr, "%s: Program not found\n", cmd2);
-                    }
-                    cleanup(&args, &args2, &newArgs);
-                    return 0;
+                    // if (!path1)
+                    // {
+                    //     fprintf(stderr, "%s: Program not found\n", cmd1);
+                    // }
+                    // if (!path2)
+                    // {
+                    //     fprintf(stderr, "%s: Program not found\n", cmd2);
+                    // }
+                    // cleanup(&args, &args2, &newArgs);
+                    // return 0;
                 }
 
                 pid_t c = fork();

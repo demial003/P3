@@ -1,0 +1,17 @@
+Demi Alao
+oaa100
+
+Rm1935
+Robert Martinez-Olivera
+
+conditionals test: 
+echo hello or echo bye
+foo bar or echo hello
+echo hello and echo bye
+foo bar and echo hello
+
+redirection test:
+echo hello > t.txt
+
+pipe test: 
+ls -a | grep 

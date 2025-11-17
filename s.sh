@@ -1,1 +1,1 @@
-echo hello
+ls -a
