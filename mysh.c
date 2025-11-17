@@ -70,50 +70,55 @@ arraylist_t readLine(int fd)
 
         for (pos = 0; pos < bytes; pos++)
         {
-            if (buf[pos] == '\n')
+            char c = buf[pos];
+
+            if (c == '#')
             {
-                int seglen = pos - segstart;
-                word = realloc(word, wordlen + seglen + 1);
-                if (word == NULL)
+                while (pos < bytes && buf[pos] != '\n')
+                    pos++;
+                if (pos == bytes)
+                    break;
+                c = buf[pos];
+            }
+
+            if (c == '\n')
+            {
+                if (wordlen > 0)
                 {
-                    exit(1);
+                    word = realloc(word, wordlen + 1);
+                    word[wordlen] = '\0';
+                    al_push(&line, word);
+                    word = NULL;
+                    wordlen = 0;
                 }
-                memcpy(word + wordlen, buf + segstart, seglen);
-                word[wordlen + seglen] = '\0';
-                al_push(&line, word);
-                wordlen = 0;
-                word = NULL;
                 newLine = 1;
                 break;
             }
 
-            if (isspace(buf[pos]) && buf[pos] != '\n')
+            if (isspace((unsigned char)c))
             {
-                int seglen = pos - segstart;
-                word = realloc(word, wordlen + seglen + 1);
-                if (word == NULL)
+                if (wordlen > 0)
                 {
-                    exit(1);
+                    word = realloc(word, wordlen + 1);
+                    word[wordlen] = '\0';
+                    al_push(&line, word);
+                    word = NULL;
+                    wordlen = 0;
                 }
-                memcpy(word + wordlen, buf + segstart, seglen);
-                word[wordlen + seglen] = '\0';
-                al_push(&line, word);
-                wordlen = 0;
-                word = NULL;
-                segstart = pos + 1;
+                continue;
             }
+
+            word = realloc(word, wordlen + 2);
+            word[wordlen++] = c;
+            word[wordlen] = '\0';
         }
-        if (segstart < pos)
+        if (!newLine && wordlen > 0)
         {
-            int seglen = pos - segstart;
-            word = realloc(word, wordlen + seglen + 1);
-            memcpy(word + wordlen, buf + segstart, seglen);
-            word[wordlen + seglen] = '\0';
-            wordlen = wordlen + seglen;
+            continue;
         }
-        if (newLine == 1)
+
+        if (newLine)
         {
-            word = NULL;
             break;
         }
     }
@@ -132,14 +137,14 @@ void cd(char *pathname)
     int check = chdir(pathname);
     if (check < 0)
     {
-        fprintf(stderr, "Failed to change directory\n");
+        fprintf(stderr, "mysh: cd: %s: No such file or directory\n", pathname);
     }
 }
 
 char *pwd()
 {
-    char *currentdir = malloc(64);
-    getcwd(currentdir, 64);
+    char *currentdir = malloc(4096);
+    getcwd(currentdir, 4096);
     return currentdir;
 }
 
@@ -151,10 +156,10 @@ char *which(char *program)
     int plen = strlen(program);
     int len = (int)strlen(path1);
 
-    char *res = malloc(plen + len + 1);
-    res = strcpy(res, path1);
-    res = strcat(res, "/");
-    res = strcat(res, program);
+    char *res = malloc(plen + len + 2);
+    strcpy(res, path1);
+    strcat(res, "/");
+    strcat(res, program);
 
     if (access(res, F_OK) == 0)
     {
@@ -163,10 +168,10 @@ char *which(char *program)
 
     free(res);
     len = strlen(path2);
-    res = malloc(plen + len + 1);
-    res = strcpy(res, path2);
-    res = strcat(res, "/");
-    res = strcat(res, program);
+    res = malloc(plen + len + 2);
+    strcpy(res, path2);
+    strcat(res, "/");
+    strcat(res, program);
 
     if (access(res, F_OK) == 0)
     {
@@ -175,17 +180,17 @@ char *which(char *program)
 
     free(res);
     len = strlen(path3);
-    res = malloc(plen + len + 1);
-    res = strcpy(res, path3);
-    res = strcat(res, "/");
-    res = strcat(res, program);
+    res = malloc(plen + len + 2);
+    strcpy(res, path3);
+    strcat(res, "/");
+    strcat(res, program);
 
     if (access(res, F_OK) == 0)
     {
         return res;
     }
 
-    fprintf(stderr, "Program not found\n");
+    return NULL;
 }
 
 void exitShell()
@@ -196,18 +201,25 @@ void exitShell()
 
 char *killShell(arraylist_t args)
 {
-    int len = strlen(args.data[0]);
-    char *res = malloc(len + 1);
-    if (args.len - 1 > 1)
+    int total = 1;
+    for (int i = 1; i < args.len - 1; i++)
     {
-        for (int i = 1; i < args.len - 1; i++)
-        {
-            res = realloc(res, len + strlen(args.data[i]));
-            res = strcat(res, args.data[i]);
-        }
-        return res;
+        total += strlen(args.data[i]) + 1;
     }
-    return NULL;
+
+    char *res = malloc(total);
+    res[0] = '\0';
+
+    for (int i = 1; i < args.len - 1; i++)
+    {
+        strcat(res, args.data[i]);
+        if (i < args.len - 2)
+        {
+            strcat(res, " ");
+        }
+    }
+
+    return res;
 }
 
 int generalCommands(arraylist_t args, int fd)
